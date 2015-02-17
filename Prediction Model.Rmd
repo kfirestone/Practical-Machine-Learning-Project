@@ -1,0 +1,88 @@
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+library(caret)
+library(randomForest)
+```
+#Practical Machine Learning Project
+
+In this machine learning excercise, we attempt to predict the efficacy of a unilateral dumbbell biceps curl performed by a cohort of test subjects based on data from a set of sensors on various parts of the body associated with this particular excercise. The data is split between a training set and test set. The efficacy with which the excercise was performed notwithstanding, the training and test data sets measure the same data points. We obtain a highly accurate model which predicts if the subject correctly performed the excercise and if not what type of common error they committed.
+
+
+We begin by loading in the training data and test data to be used for the model.
+
+```{r}
+TrainingData <- read.csv("pml-training.csv")
+TestData <- read.csv("pml-testing.csv")
+```
+
+A quick glance of the data shows several variables which are clearly not relevant to how the activity is performed such as id, name, time data and logistics data and hence were removed. Moreover, there are several potential predictors which are mostly NA values. To remove these, all variables which contained more then 95% NA values were removed from the list of potential predictors. Further, any factor data types were removed from the list of predictors.
+
+```{r}
+toRemove <- c(1:7) #Irrelevant data for model
+
+for(i in 8:159) #Runs through all remaining predicts with the exception of the variable we are predicting on
+{
+     N <- nrow(TrainingData)
+     
+     if((N - sum(is.na(TrainingData[,i])))/N < 0.05) #Sets NA heavy variables to be removed from data set
+     {
+          toRemove <- c(toRemove,i)
+     }
+     
+     if(is.factor(TrainingData[,i]) == "TRUE") #Sets factor variables to be removed from data set
+     {
+          toRemove <- c(toRemove,i)
+     }  
+}
+
+TrainingData <- TrainingData[,-toRemove] #Removes above variables from the training data
+TestData <- TestData[,-toRemove] #Removes above variables from the test data
+```
+
+It was also necessary to change some of the data types of certain sensor variables in the test data to match up with the associated sensor in the training set to prevent issues with using the model obtained from the training data on the test data.
+
+```{r}
+TestData[,39] <- as.numeric(TestData[,39])
+TestData[,51] <- as.numeric(TestData[,51])
+TestData[,52] <- as.numeric(TestData[,52])
+TestData[,53] <- as.factor(TestData[,53])
+```
+
+Next the training set was further split up into a smaller training set to be used for training the model and a cross validation set to check the effectiveness of the model. Here we chose to allocate 60% of the original training set to the newly partitioned training set and the remaining 40% to the cross validation set.
+
+```{r}
+set.seed(1)
+
+inTrain <- createDataPartition(y = TrainingData$classe, p = 0.6, list = FALSE)
+
+TrainingData <- TrainingData[inTrain, ]
+CrossValidation <- TrainingData[-inTrain, ]
+```
+
+Here we create the model by using random forests on the training data with the `randomForest` package. The model was built on predicting on the classe variable using the remaining predictors.
+
+```{r}
+TrainRF <- randomForest(classe ~ ., data = TrainingData)
+```
+
+Following the creation of the model we tested how successful is was at predicting how well the test subjects performed the weight lifting excercise.
+
+```{r}
+PredictTrainRF <- predict(TrainRF)
+
+confusionMatrix(PredictTrainRF, TrainingData$classe)
+```
+
+The confusion matrix suggests this is a very accurate model, with an error rate of less than 1% on the training data. We now attempt to get an idea of what the out of sample error is by predicting on the cross validation set using the model obtained from the training data. As the confusion matrix below shows, the model is 100% accurate for the cross validation set, suggesting that the out of sample error for this model is extremely low.
+
+```{r}
+PredictCrossValidation <- predict(TrainRF, CrossValidation[,-53])
+
+confusionMatrix(PredictCrossValidation, CrossValidation$classe)
+```
+
+We conclude by applying the model determined from the training data to the test data and displaying the predicted results.
+
+```{r}
+PredictTestData <- predict(TrainRF, TestData[,-53])
+PredictTestData
+```
